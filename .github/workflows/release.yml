@@ -1,0 +1,43 @@
+name: Release
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - name: Extract version
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+      - name: Bundle userscript
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}" \
+          RAW_BASE="https://raw.githubusercontent.com/${{ github.repository }}/${GITHUB_REF_NAME}" \
+          node .github/scripts/bundle.js
+      - name: Create GitHub Release
+        run: |
+          curl -fsS -X POST \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            -H "Content-Type: application/json" \
+            -d "{\"tag_name\":\"${{ github.ref_name }}\",\"name\":\"jSkid ${{ github.ref_name }}\",\"body\":\"## jSkid ${{ github.ref_name }}\n\nInstall: https://github.com/${{ github.repository }}/releases/latest/download/jskid.user.js\nDocs: https://github.com/${{ github.repository }}/tree/${{ github.ref_name }}/docs\",\"draft\":false,\"prerelease\":false}" \
+            "https://api.github.com/repos/${{ github.repository }}/releases" > /tmp/release.json
+          cat /tmp/release.json
+          jq -e '.id // empty' /tmp/release.json > /dev/null || { echo "Release creation failed"; cat /tmp/release.json; exit 1; }
+      - name: Upload userscript asset
+        run: |
+          UPLOAD_URL=$(jq -r '.upload_url' /tmp/release.json | sed 's/{?name,label}//')
+          echo "Upload URL: $UPLOAD_URL"
+          curl -fsS -X POST "${UPLOAD_URL}?name=jskid.user.js" \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            -H "Content-Type: application/javascript" \
+            --data-binary @jskid.user.js
+          echo "Asset uploaded successfully"

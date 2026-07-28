@@ -1,0 +1,20 @@
+name: CI — Syntax & Validation
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - run: |
+          shopt -s globstar
+          for f in src/**/*.js scripts/**/*.js; do
+            node --check "$f" || { echo "Syntax error in $f"; exit 1; }
+          done
+          echo "All JS files pass syntax check."
+      - run: test -f .github/scripts/bundle.js && echo "Bundler present." || { echo "Missing bundler"; exit 1; }
